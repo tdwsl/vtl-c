@@ -1,0 +1,12 @@
+1 N='/100*0+%+1)Random number guessing
+2 ?="Enter a number from 1 to 100"
+3 G=?
+4 #=G<N*9
+5 #=G-1>N*11
+6 ?="You got it! The number was ";
+7 ?=N
+8 #=100
+9 ?="Too low."
+10 #=3
+11 ?="Too high."
+12 #=3
