@@ -11,6 +11,7 @@ int nlines = 0;
 int pc = 0;
 int prev = 0;
 int start = 0;
+FILE *inp, *out;
 
 #define MEMSZ 65536
 int memsz = MEMSZ;
@@ -34,28 +35,31 @@ int key() {
 }
 #endif
 
-int eval();
+unsigned short eval();
 
-int value() {
-  int n = 0;
+unsigned short value() {
+  unsigned short n = 0;
   char *o = s;
   while(*s >= '0' && *s <= '9') n = n*10+*s++-'0';
   if(s != o) return n;
   switch(*s++) {
-  case '$': return key();
+  case '$':
+    if(inp == stdin) return key();
+    if(!inp) return 65535;
+    return fgetc(inp);
   case '(': return eval();
   case '#': return pc;
   case '?':
     {
+      if(!inp) return 0;
       char buf[100];
-      fgets(buf, 99, stdin);
+      fgets(buf, 99, inp);
       char *l = s;
       s = buf;
       int n = eval();
       s = l;
       return n;
     }
-  case '!': return prev;
   case '*': return memsz;
   case '&': return start;
   case ':': return mem[eval()];
@@ -65,9 +69,9 @@ int value() {
   if(*s >= '!' && *s <= '`') return vars[*s++-'!'];
 }
 
-int eval() {
-  int n = value();
-  int b;
+unsigned short eval() {
+  unsigned short n = value();
+  unsigned short b;
   while(*s != '\n') {
     switch(*s++) {
     case ')': return n;
@@ -84,6 +88,17 @@ int eval() {
   return n;
 }
 
+FILE *openFile(FILE *fp, FILE *cmp, const char *mode) {
+  if(fp && fp != cmp) fclose(fp);
+  if(*s == '"') {
+    char buf[100]; int i = 0;
+    while(*++s != '\n' && *s != '"') buf[i++] = *s;
+    if(!i) return cmp;
+    buf[i] = 0;
+    return fopen(buf, mode);
+  } else return fopen(&mem[eval()], mode);
+}
+
 void runLine(char *l) {
   s = l;
   char c = *s++;
@@ -95,19 +110,22 @@ void runLine(char *l) {
   }
   if(*s++ != '=') return;
   if(c == '?') {
+    if(!out) return;
     if(*s == '"') {
-      while(*++s != '\n' && *s != '"') printf("%c", *s);
+      while(*++s != '\n' && *s != '"') fprintf(out, "%c", *s);
       if(*s) s++;
-    } else printf("%d", (unsigned short)eval());
-    if(*s != ';') printf("\n");
+    } else fprintf(out, "%d", eval());
+    if(*s != ';') fputc('\n', out);
   }
+  if(c == '<') { inp = openFile(inp, stdin, "r"); return; }
+  if(c == '>') { inp = openFile(out, stdout, "w"); return; }
   int n = eval();
   switch(c) {
   case '$':
-    printf("%c", n);
+    if(out) fputc(n, out);
     break;
   case '#':
-    if(n) { prev = pc+1; pc = n-1; }
+    if(n) { vars[0] = pc+1; pc = n-1; }
     break;
   case '&': start = n; break;
   case '*': memsz = n; break;
@@ -122,7 +140,8 @@ void addLine(char *s) {
   while(*s >= '0' && *s <= '9') n = n*10+*s++-'0';
   while(*s && *s <= ' ') s++;
   if(n) {
-    start += sprintf(&mem[start], "%d ", n);
+    *(short*)&mem[start] = nlines;
+    start += 2; mem[start++] = strlen(s)+1;
     lines[nlines] = &mem[start];
     start += sprintf(&mem[start], "%s", s);
     linen[nlines++] = n;
@@ -143,6 +162,8 @@ void run() {
 int main(int argc, char **args) {
   char buf[100];
   srand(time(0));
+  inp = stdin;
+  out = stdout;
   FILE *fp = stdin;
   if(argc > 1) fp = fopen(args[1], "r");
   if(!fp) return printf("failed to open %s\n", args[1]);
